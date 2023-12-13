@@ -28,6 +28,7 @@
 
 #include "macros.h"
 
+
 struct Shared_lock {
 
 }; 
@@ -50,13 +51,13 @@ struct Region {
 **/
 shared_t tm_create(size_t unused(size), size_t unused(align)) {
     // TODO: tm_create(size_t, size_t)
-    struct region* region = (struct region*)malloc(sizeof(struct region));
+    struct Region* region = (struct Region*)malloc(sizeof(struct Region));
     if (unlikely(!region)) {
-        return invalid_shared;
+        return NULL;
     }
 
 
-    return invalid_shared;
+    return NULL;
 }
 
 /** Destroy (i.e. clean-up + free) a given shared memory region.
