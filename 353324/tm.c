@@ -1,10 +1,8 @@
 /**
  * @file   tm.c
- * @author [...]
+ * @author Qingyi HE <qingyi.he@epfl.ch>
  *
  * @section LICENSE
- *
- * [...]
  *
  * @section DESCRIPTION
  *
@@ -21,11 +19,29 @@
 #endif
 
 // External headers
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 // Internal headers
 #include <tm.h>
 
 #include "macros.h"
+
+struct Shared_lock {
+
+}; 
+struct Segment {
+    struct Shared_lock lock;    // TODO: implement "shared_lock"
+    // TBD
+}; 
+struct Region {
+    void* start;
+    struct Segment* allocs;
+    size_t size;
+    // TBD
+};
+
 
 /** Create (i.e. allocate + init) a new shared memory region, with one first non-free-able allocated segment of the requested size and alignment.
  * @param size  Size of the first shared segment of memory to allocate (in bytes), must be a positive multiple of the alignment
@@ -34,6 +50,12 @@
 **/
 shared_t tm_create(size_t unused(size), size_t unused(align)) {
     // TODO: tm_create(size_t, size_t)
+    struct region* region = (struct region*)malloc(sizeof(struct region));
+    if (unlikely(!region)) {
+        return invalid_shared;
+    }
+
+
     return invalid_shared;
 }
 
