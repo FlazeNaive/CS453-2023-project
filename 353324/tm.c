@@ -22,18 +22,23 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h>
 
 // Internal headers
 #include <tm.h>
 
 #include "macros.h"
 
+typedef _Atomic(tx_t) atomic_tx;
 
-struct Shared_lock {
-
+struct Batcher{
+    atomic_ulong last;
+    atomic_ulong next; 
+    atomic_ulong cnt_thread;
+    atomic_ulong cnt_epoch;
 }; 
 struct Segment {
-    struct Shared_lock lock;    // TODO: implement "shared_lock"
+    struct Batcher batcher;    // TODO: implement "shared_lock"
     // TBD
 }; 
 struct Region {
@@ -42,6 +47,8 @@ struct Region {
     size_t size;
     // TBD
 };
+
+
 
 
 /** Create (i.e. allocate + init) a new shared memory region, with one first non-free-able allocated segment of the requested size and alignment.
