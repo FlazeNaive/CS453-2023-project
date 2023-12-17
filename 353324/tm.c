@@ -38,15 +38,20 @@ static const tx_t read_write_tx = UINTPTR_MAX - 11;
 typedef _Atomic(tx_t) atomic_tx;
 
 struct Batcher_str{
-    atomic_ulong last;
-    atomic_ulong next; 
+    atomic_tx last;
+    atomic_tx next; 
     atomic_ulong cnt_thread;
     atomic_ulong cnt_epoch;
 
     // TBD
 };
 typedef struct Batcher_str Batcher; 
-// atomic_ulong get_epoch(Batcher* batcher) { return atomic_load(&(batcher -> cnt_epoch)); }
+// ==============================
+// Batcher Functions
+atomic_ulong get_epoch(Batcher* batcher) { return atomic_load(&(batcher -> cnt_epoch)); }
+atomic_tx get_last(Batcher* batcher) { return atomic_load(&(batcher -> last)); }
+atomic_tx get_next(Batcher* batcher) { return atomic_load(&(batcher -> next)); }
+
 
 struct Word_str {
     void* data1;
@@ -75,7 +80,7 @@ struct Region_str {
     size_t size;
     size_t align;
 
-    // Batcher batcher;
+    Batcher batcher;
     struct shared_lock_t lock;
     // TBD
 };
@@ -135,6 +140,7 @@ void tm_destroy(shared_t shared) {
         free(tmp);
     }
 
+    // ==============================
     shared_lock_cleanup(&(region->lock));
     // ==============================
 
