@@ -32,8 +32,8 @@
 #include "shared-lock.h"
 
 // Constants and types
-static const tx_t read_only_tx  = UINTPTR_MAX - 10;
-static const tx_t read_write_tx = UINTPTR_MAX - 11;
+static const tx_t read_only_tx  = UINTPTR_MAX - 1;
+static const tx_t read_write_tx = UINTPTR_MAX - 2;
 
 typedef _Atomic(tx_t) atomic_tx;
 
@@ -86,6 +86,17 @@ struct Region_str {
 };
 typedef struct Region_str Region;
 
+static inline Segment* findSegment(const Region * region, const void* source) {
+    Segment* seg = region -> allocs;
+    while(seg != NULL) {
+        if (seg -> data <= source && source < seg -> data + seg -> size) {
+            return seg;
+        }
+        seg = seg -> next;
+    }
+    return NULL;
+}
+
 
 /** Create (i.e. allocate + init) a new shared memory region, with one first non-free-able allocated segment of the requested size and alignment.
  * @param size  Size of the first shared segment of memory to allocate (in bytes), must be a positive multiple of the alignment
@@ -103,8 +114,6 @@ shared_t tm_create(size_t unused(size), size_t unused(align)) {
     if (unlikely(!region)) {
         return invalid_shared;
     }
-
-
     if (unlikely(posix_memalign(&(region -> start), align, size) != 0)) {
         free(region);
         return invalid_shared;
@@ -114,12 +123,17 @@ shared_t tm_create(size_t unused(size), size_t unused(align)) {
     region -> size = size;
     region -> allocs = NULL; 
 
-    // TODO: create Batcher
     if (!shared_lock_init(&(region->lock))) {
         free(region->start);
         free(region);
         return invalid_shared;
     }
+
+    // TODO: create Batcher
+    atomic_store(&(region -> batcher.last), 0);
+    atomic_store(&(region -> batcher.next), 0);
+    atomic_store(&(region -> batcher.cnt_thread), 0);
+    atomic_store(&(region -> batcher.cnt_epoch), 0);
 
     printf("END CREATE for MY\n");
     return region; 
@@ -182,9 +196,12 @@ size_t tm_align(shared_t unused(shared)) {
  * @param is_ro  Whether the transaction is read-only
  * @return Opaque transaction ID, 'invalid_tx' on failure
 **/
-tx_t tm_begin(shared_t unused(shared), bool unused(is_ro)) {
+tx_t tm_begin(shared_t shared, bool is_ro) {
     // printf("======\ntm_begin\n");
     // TODO: tm_begin(shared_t)
+    if (is_ro) {
+        // read_only_tx
+    }
     Region *region = (Region*)shared;
     if (is_ro) {
         // printf("tm_begin: is_ro\n");
