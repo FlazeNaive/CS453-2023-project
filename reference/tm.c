@@ -81,8 +81,6 @@ shared_t tm_create(size_t size, size_t align) {
     region->allocs      = NULL;
     region->size        = size;
     region->align       = align;
-
-    // printf("TESTING for REF\n\n");
     return region;
 }
 

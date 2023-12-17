@@ -28,81 +28,17 @@
 // Internal headers
 #include <tm.h>
 
+#include "structs.h"
+#include "batcher_func.h"
 #include "macros.h"
 #include "shared-lock.h"
-
-// Constants and types
-static const tx_t read_only_tx  = UINTPTR_MAX - 1;
-static const tx_t read_write_tx = UINTPTR_MAX - 2;
-
-typedef _Atomic(tx_t) atomic_tx;
-
-struct Batcher_str{
-    atomic_tx last;
-    atomic_tx next; 
-    atomic_ulong cnt_thread;
-    atomic_ulong cnt_epoch;
-
-    // TBD
-};
-typedef struct Batcher_str Batcher; 
-// ==============================
-// Batcher Functions
-atomic_ulong get_epoch(Batcher* batcher) { return atomic_load(&(batcher -> cnt_epoch)); }
-atomic_tx get_last(Batcher* batcher) { return atomic_load(&(batcher -> last)); }
-atomic_tx get_next(Batcher* batcher) { return atomic_load(&(batcher -> next)); }
-
-
-struct Word_str {
-    void* data1;
-    void* data2; 
-    //SOMETHING control; 
-
-    // atomic_tx owner; 
-}; 
-typedef struct Word_str Word;
-// typedef uint8_t Word;
-
-struct Segment_str {
-    // Batcher batcher;
-    Word* data; 
-    size_t size; 
-    atomic_tx owner; 
-    struct Segment_str* next;
-    struct Segment_str* previous; 
-    // TBD
-}; 
-typedef struct Segment_str Segment; 
-
-struct Region_str {
-    void* start;
-    Segment* allocs;
-    size_t size;
-    size_t align;
-
-    Batcher batcher;
-    struct shared_lock_t lock;
-    // TBD
-};
-typedef struct Region_str Region;
-
-static inline Segment* findSegment(const Region * region, const void* source) {
-    Segment* seg = region -> allocs;
-    while(seg != NULL) {
-        if (seg -> data <= source && source < seg -> data + seg -> size) {
-            return seg;
-        }
-        seg = seg -> next;
-    }
-    return NULL;
-}
-
 
 /** Create (i.e. allocate + init) a new shared memory region, with one first non-free-able allocated segment of the requested size and alignment.
  * @param size  Size of the first shared segment of memory to allocate (in bytes), must be a positive multiple of the alignment
  * @param align Alignment (in bytes, must be a power of 2) that the shared memory region must support
  * @return Opaque shared memory region handle, 'invalid_shared' on failure
 **/
+
 shared_t tm_create(size_t unused(size), size_t unused(align)) {
     // printf("STARTING my CREATE\n\n");
     align = align < sizeof(void*) ? sizeof(void*) : align;
@@ -198,18 +134,14 @@ size_t tm_align(shared_t unused(shared)) {
 **/
 tx_t tm_begin(shared_t shared, bool is_ro) {
     // printf("======\ntm_begin\n");
-    // TODO: tm_begin(shared_t)
-    if (is_ro) {
-        // read_only_tx
-    }
     Region *region = (Region*)shared;
     if (is_ro) {
         // printf("tm_begin: is_ro\n");
-        // Note: "unlikely" is a macro that helps branch prediction.
-        // It tells the compiler (GCC) that the condition is unlikely to be true
-        // and to optimize the code with this additional knowledge.
-        // It of course penalizes executions in which the condition turns up to
-        // be true.
+
+
+
+        // ==============================
+        // ==== reference implementation
         if (unlikely(!shared_lock_acquire_shared(&(region ->lock)))){
             printf("tm_begin: is_ro: failed\n");
             return invalid_tx;
