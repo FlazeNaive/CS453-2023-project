@@ -66,10 +66,11 @@ shared_t tm_create(size_t unused(size), size_t unused(align)) {
     }
 
     // TODO: create Batcher
-    atomic_store(&(region -> batcher.last), 0);
+    atomic_store(&(region -> batcher.timestamp), 0);
     atomic_store(&(region -> batcher.next), 0);
     atomic_store(&(region -> batcher.cnt_thread), 0);
     atomic_store(&(region -> batcher.cnt_epoch), 0);
+    atomic_store(&(region -> batcher.res_writes), batch_size);
 
     printf("END CREATE for MY\n");
     return region; 
@@ -135,10 +136,18 @@ size_t tm_align(shared_t unused(shared)) {
 tx_t tm_begin(shared_t shared, bool is_ro) {
     // printf("======\ntm_begin\n");
     Region *region = (Region*)shared;
+    Batcher batcher = region -> batcher;
+    tx_t idx = atomic_fetch_add(&(batcher.timestamp), 1);
+
+    while (idx != atomic_load(&(batcher.next)))
+        sched_yield();
+
     if (is_ro) {
         // printf("tm_begin: is_ro\n");
+        atomic_fetch_add(&(batcher.cnt_thread), 1);
+        atomic_fetch_add(&(batcher.next), 1);
 
-
+        return read_only_tx;
 
         // ==============================
         // ==== reference implementation
@@ -149,6 +158,31 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
         return read_only_tx;
     } else {
         // printf("tm_begin: is_rw\n");
+        while(true) {
+            if (atomic_load(&(batcher.res_writes)) != 0) {
+                atomic_fetch_sub(&(batcher.res_writes), 1);
+                break; 
+            }
+
+            // skip and wait for next epoch, process with new idx
+            atomic_fetch_add(&(batcher.timestamp), 1);
+
+            ulong this_epoch = get_epoch(&batcher);
+            while (this_epoch == get_epoch(&batcher))
+                sched_yield();
+            
+            idx = atomic_fetch_add(&(batcher.timestamp), 1);
+            while (idx != atomic_load(&(batcher.next)))
+                sched_yield();
+        } 
+        
+        atomic_fetch_add(&(batcher.cnt_thread), 1);
+
+        return idx; 
+
+        // ==============================
+        // ==== reference implementation
+
         if (unlikely(!shared_lock_acquire(&(region ->lock)))){
             printf("tm_begin: is_rw: failed\n");
             return invalid_tx;
@@ -175,7 +209,7 @@ bool tm_end(shared_t unused(shared), tx_t unused(tx)) {
     }
     return true;
     // ==============================
-
+    // ==== reference implementation
 
     return false;
 }

@@ -17,14 +17,16 @@
 // Constants and types
 static const tx_t read_only_tx  = UINTPTR_MAX - 1;
 static const tx_t read_write_tx = UINTPTR_MAX - 2;
+static const ulong batch_size = 8; 
 
 typedef _Atomic(tx_t) atomic_tx;
 
 struct Batcher_str{
-    atomic_tx last;
+    atomic_tx timestamp;
     atomic_tx next; 
-    atomic_ulong cnt_thread;
     atomic_ulong cnt_epoch;
+    atomic_ulong cnt_thread;
+    atomic_ulong res_writes;
 
     // TBD
 };
@@ -32,8 +34,6 @@ typedef struct Batcher_str Batcher;
 // ==============================
 // Batcher Functions
 atomic_ulong get_epoch(Batcher* batcher) { return atomic_load(&(batcher -> cnt_epoch)); }
-atomic_tx get_last(Batcher* batcher) { return atomic_load(&(batcher -> last)); }
-atomic_tx get_next(Batcher* batcher) { return atomic_load(&(batcher -> next)); }
 
 
 struct Word_str {
