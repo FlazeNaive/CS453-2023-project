@@ -18,6 +18,8 @@
     #error Current C11 compiler does not support atomic operations
 #endif
 
+#define _TO_USE_BATCHER_ 
+
 // External headers
 #include <stddef.h>
 #include <stdlib.h>
@@ -136,18 +138,25 @@ size_t tm_align(shared_t unused(shared)) {
 tx_t tm_begin(shared_t shared, bool is_ro) {
     // printf("======\ntm_begin\n");
     Region *region = (Region*)shared;
-    Batcher batcher = region -> batcher;
-    tx_t idx = atomic_fetch_add(&(batcher.timestamp), 1);
 
-    while (idx != atomic_load(&(batcher.next)))
+    #ifdef _TO_USE_BATCHER_
+    Batcher batcher = region -> batcher;
+    tx_t process_idx = atomic_fetch_add(&(batcher.timestamp), 1);
+
+    while (process_idx != atomic_load(&(batcher.next)))
         sched_yield();
+    #endif
 
     if (is_ro) {
         // printf("tm_begin: is_ro\n");
+        
+        #ifdef _TO_USE_BATCHER_
+
         atomic_fetch_add(&(batcher.cnt_thread), 1);
         atomic_fetch_add(&(batcher.next), 1);
 
         return read_only_tx;
+        #endif
 
         // ==============================
         // ==== reference implementation
@@ -158,6 +167,9 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
         return read_only_tx;
     } else {
         // printf("tm_begin: is_rw\n");
+
+        #ifdef _TO_USE_BATCHER_
+
         while(true) {
             if (atomic_load(&(batcher.res_writes)) != 0) {
                 atomic_fetch_sub(&(batcher.res_writes), 1);
@@ -171,14 +183,16 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
             while (this_epoch == get_epoch(&batcher))
                 sched_yield();
             
-            idx = atomic_fetch_add(&(batcher.timestamp), 1);
-            while (idx != atomic_load(&(batcher.next)))
+            process_idx = atomic_fetch_add(&(batcher.timestamp), 1);
+            while (process_idx != atomic_load(&(batcher.next)))
                 sched_yield();
         } 
         
-        atomic_fetch_add(&(batcher.cnt_thread), 1);
+        ulong tx_idx = atomic_fetch_add(&(batcher.cnt_thread), 1);
 
-        return idx; 
+        return tx_idx; 
+
+        #endif
 
         // ==============================
         // ==== reference implementation
@@ -202,14 +216,48 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
 bool tm_end(shared_t unused(shared), tx_t unused(tx)) {
     // TODO: tm_end(shared_t, tx_t)
     Region* region = (Region*)shared;
+
+    #ifdef _TO_USE_BATCHER_
+
+    Batcher batcher = region -> batcher;
+    ulong process_idx = atomic_fetch_add(&(batcher.timestamp), 1);
+    while (process_idx != atomic_load(&(batcher.next)))
+        sched_yield();
+
+
+    ulong cnt_thread = atomic_fetch_sub(&(batcher.cnt_thread), 1);
+    if (cnt_thread == 1) {
+        // do cleanup for this epoch
+        // TODO
+
+
+        // and start a new epoch
+        atomic_fetch_add(&(batcher.cnt_epoch), 1);
+        atomic_store(&(batcher.res_writes), batch_size);
+
+        atomic_fetch_add(&(batcher.next), 1);
+        return true;
+    } else {
+        atomic_fetch_add(&(batcher.next), 1);
+        if (tx != read_only_tx) {
+
+
+        } else {
+            return true;
+        }
+    }
+    
+
+    #endif
+
+    // ==============================
+    // ==== reference implementation
     if (tx == read_only_tx) {
         shared_lock_release_shared(&(region->lock));
     } else {
         shared_lock_release(&(region->lock));
     }
     return true;
-    // ==============================
-    // ==== reference implementation
 
     return false;
 }
