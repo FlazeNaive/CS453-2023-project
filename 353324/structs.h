@@ -17,7 +17,8 @@
 // Constants and types
 static const tx_t read_only_tx  = UINTPTR_MAX - 1;
 static const tx_t read_write_tx = UINTPTR_MAX - 2;
-static const tx_t it_is_free    = UINTPTR_MAX - 3;
+static const tx_t to_delete = UINTPTR_MAX - 3;
+static const tx_t it_is_free    = 0; //UINTPTR_MAX - 4;
 static const ulong batch_size = 8; 
 
 typedef _Atomic(tx_t) atomic_tx;
@@ -41,7 +42,7 @@ struct Batcher_str{
 typedef struct Batcher_str Batcher; 
 // ==============================
 // Batcher Functions
-atomic_ulong get_epoch(Batcher* batcher) { return atomic_load(&(batcher -> cnt_epoch)); }
+static inline atomic_ulong get_epoch(const Batcher* batcher) { return atomic_load(&(batcher -> cnt_epoch)); }
 
 
 struct Word_str {
@@ -61,6 +62,7 @@ struct Segment_str {
     size_t size; 
     /// @brief actually it's the creator of this segment
     atomic_tx creator; 
+    atomic_bool to_delete; 
     struct Segment_str* next;
     struct Segment_str* previous; 
     // TBD

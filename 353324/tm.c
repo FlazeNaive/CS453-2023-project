@@ -214,7 +214,7 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
  * @param tx     Transaction to end
  * @return Whether the whole transaction committed
 **/
-bool tm_end(shared_t unused(shared), tx_t unused(tx)) {
+bool tm_end(shared_t shared, tx_t tx) {
     // TODO: tm_end(shared_t, tx_t)
     Region* region = (Region*)shared;
 
@@ -231,6 +231,10 @@ bool tm_end(shared_t unused(shared), tx_t unused(tx)) {
         if (atomic_load(&(batcher.is_writing))) {
             // if this epoch contains some writes
             for (Segment* seg = region -> allocs; seg != NULL; seg = seg -> next) {
+                if (atomic_load(&(seg -> to_delete))){
+                    tm_free(region, seg ->creator, seg); 
+                    continue; 
+                }
                 // commit all writes
                 // from shadow to data
                 memcpy(seg -> data, seg -> shadow, seg -> size * sizeof(Word));
@@ -288,9 +292,51 @@ bool tm_end(shared_t unused(shared), tx_t unused(tx)) {
  * @param target Target start address (in a private region)
  * @return Whether the whole transaction can continue
 **/
-bool tm_read(shared_t unused(shared), tx_t unused(tx), void const* source, size_t size, void* target) {
+bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
     // TODO: tm_read(shared_t, tx_t, void const*, size_t, void*)
     // printf("start tm_read\n");
+    #ifdef _TO_USE_BATCHER_
+    Region *region = (Region*)shared;
+    if (tx == read_only_tx) {
+        memcpy(target, source, size);
+        return true;
+    }
+
+    Segment* seg = findSegment(region, source);
+    if (seg == NULL) {
+        // printf("tm_read: seg is NULL\n");
+        Undo(region, tx); 
+        return false;
+    }
+
+    size_t cnt_word = size / sizeof(Word);
+    size_t offset = (uintptr_t)source - (uintptr_t)seg -> data;
+    for (int i = 0; i < cnt_word; ++i) {
+        atomic_tx * control = seg -> control + offset + i;
+        tx_t expected = it_is_free;
+        if (tx == atomic_load(control)) {
+            memcpy(((Word*) target) + i , 
+                    seg -> shadow + offset + i, 
+                    sizeof(Word));
+        } else {
+            if (atomic_compare_exchange_strong(control, &expected, tx + batch_size)
+                || expected == tx + batch_size
+                ) {
+                    memcpy(((Word*) target) + i , 
+                            seg -> data + offset + i, 
+                            sizeof(Word));
+            } else {
+                Undo(region, tx);
+                return false;
+            }
+        }
+    }
+    
+    return true; 
+
+    #endif
+    // ==============================
+    // ==== reference implementation
     memcpy(target, source, size);
     // printf("end tm_read\n");
     return true;
@@ -346,9 +392,9 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void** target) {
                    + sizeof(tx_t) * size 
                    + sizeof(Word) * size * 2 );
 
-    seg -> control = (tx_t*)((uintptr_t)seg + sizeof(Segment));
-    seg -> data = (Word*)((uintptr_t)seg -> control + sizeof(tx_t) * size);
+    seg -> data = (tx_t*)((uintptr_t)seg + sizeof(Segment));
     seg -> shadow = (Word*)((uintptr_t)seg -> data + sizeof(Word) * size);
+    seg -> control = (Word*)((uintptr_t)seg -> shadow + sizeof(Word) * size);
     // memset(seg -> data, 0, size * sizeof(Word));
 
     // add creator and size

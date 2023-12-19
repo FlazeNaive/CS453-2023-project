@@ -6,9 +6,9 @@
 The data with leading controls is duplicated and appended to the segment header. 
 Briefly, it's like the structure as: 
   1. header
-  2. control [tx_t * size]
   2. data [Word * size]
   3. shadow [Word * size]
+  4. control [tx_t * size]
 The alloc will return the address of `data`. 
 But the write should first write to `shadow`, and at the end of each epoch, copy the data from `shadow` to `data`. 
 
