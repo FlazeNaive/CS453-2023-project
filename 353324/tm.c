@@ -252,14 +252,14 @@ bool tm_end(shared_t shared, tx_t tx) {
                 // and it will not get reset in the following epoches
                 atomic_store(&(seg -> creator), it_is_free); 
             }
+            // and start a new epoch
+            atomic_fetch_add(&(batcher->cnt_epoch), 1);
+            atomic_store(&(batcher->res_writes), batch_size);
+            atomic_store(&(batcher->is_writing), false);
         } 
 
-        // and start a new epoch
-        atomic_fetch_add(&(batcher->cnt_epoch), 1);
-        atomic_store(&(batcher->res_writes), batch_size);
-        atomic_store(&(batcher->is_writing), false);
-
         atomic_fetch_add(&(batcher->next), 1);
+
         return true;
     } else {
         // not the end of epoch
