@@ -1,3 +1,5 @@
+#ifdef _TO_USE_BATCHER_
+
 #ifndef _BATCHER_H_
 #define _BATCHER_H_
 
@@ -19,5 +21,7 @@ static inline Segment* findSegment(const Region * region, const void* source) {
     }
     return NULL;
 }
+
+#endif
 
 #endif

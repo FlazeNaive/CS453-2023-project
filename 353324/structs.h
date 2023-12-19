@@ -17,6 +17,7 @@
 // Constants and types
 static const tx_t read_only_tx  = UINTPTR_MAX - 1;
 static const tx_t read_write_tx = UINTPTR_MAX - 2;
+static const tx_t it_is_free    = UINTPTR_MAX - 3;
 static const ulong batch_size = 8; 
 
 typedef _Atomic(tx_t) atomic_tx;
@@ -48,7 +49,6 @@ struct Word_str {
     void* data2; 
     //SOMETHING control; 
 
-    // atomic_tx owner; 
 }; 
 // typedef struct Word_str Word;
 typedef uint8_t Word;
@@ -57,8 +57,10 @@ struct Segment_str {
     // Batcher batcher;
     Word* data; 
     Word* shadow; 
+    tx_t* control;
     size_t size; 
-    atomic_tx owner; 
+    /// @brief actually it's the creator of this segment
+    atomic_tx creator; 
     struct Segment_str* next;
     struct Segment_str* previous; 
     // TBD

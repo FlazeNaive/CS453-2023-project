@@ -3,9 +3,10 @@
 ## Notes
 
 ### Segments
-The data is duplicated and appended to the segment header. 
+The data with leading controls is duplicated and appended to the segment header. 
 Briefly, it's like the structure as: 
   1. header
+  2. control [tx_t * size]
   2. data [Word * size]
   3. shadow [Word * size]
 The alloc will return the address of `data`. 

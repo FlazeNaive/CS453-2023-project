@@ -226,18 +226,18 @@ bool tm_end(shared_t unused(shared), tx_t unused(tx)) {
         sched_yield();
 
 
-
     if (atomic_fetch_sub(&(batcher.cnt_thread), 1) == 1) {
         // if at the end of the epoch, do cleanup
         if (atomic_load(&(batcher.is_writing))) {
             // if this epoch contains some writes
             for (Segment* seg = region -> allocs; seg != NULL; seg = seg -> next) {
-                if (atomic_load(&(seg -> owner)) != read_only_tx) {
-                    // if this segment is owned by a read-write tx
-                    // TBD: commit the write
-                    // printf("committing write\n");
-                    memcpy(seg -> data, seg -> shadow, seg -> size * sizeof(Word));
-                }
+                // commit all writes
+                // from shadow to data
+                memcpy(seg -> data, seg -> shadow, seg -> size * sizeof(Word));
+                // and reset control
+                memset(seg -> control, 0, seg -> size * sizeof(tx_t));
+                // and it will not get reset in the following epoches
+                atomic_store(&(seg -> creator), it_is_free); 
             }
         } 
 
@@ -337,17 +337,22 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void** target) {
     // Words are appended to the end of the segment
     Segment* seg; 
     if (unlikely(posix_memalign((void**)&seg, align, sizeof(Segment) 
-                                                     + sizeof(Word) * size * 2) != 0)) {
+                                                     + sizeof(tx_t) * size
+                                                     + sizeof(Word) * size * 2) != 0)) 
+    {
         return nomem_alloc;
     }
+    memset(seg, 0, sizeof(Segment) 
+                   + sizeof(tx_t) * size 
+                   + sizeof(Word) * size * 2 );
 
-    memset(seg, 0, sizeof(Segment) + sizeof(Word) * size);
-    seg -> data = (Word*)((uintptr_t)seg + sizeof(Segment));
-    seg -> shadow = (Word*)((uintptr_t)seg + sizeof(Segment) + sizeof(Word) * size);
+    seg -> control = (tx_t*)((uintptr_t)seg + sizeof(Segment));
+    seg -> data = (Word*)((uintptr_t)seg -> control + sizeof(tx_t) * size);
+    seg -> shadow = (Word*)((uintptr_t)seg -> data + sizeof(Word) * size);
     // memset(seg -> data, 0, size * sizeof(Word));
 
-    // add owner and size
-    atomic_store(&(seg -> owner), tx);
+    // add creator and size
+    atomic_store(&(seg -> creator), tx);
     seg -> size = size;
     
     // add to linked list
