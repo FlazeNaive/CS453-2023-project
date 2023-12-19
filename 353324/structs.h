@@ -22,11 +22,18 @@ static const ulong batch_size = 8;
 typedef _Atomic(tx_t) atomic_tx;
 
 struct Batcher_str{
+    /// @brief ts to assign to the next requring thread
     atomic_tx timestamp;
+    /// @brief next thread to process
     atomic_tx next; 
+    /// @brief which epoch this batcher is in
     atomic_ulong cnt_epoch;
+    /// @brief Number of threads in this epoch
     atomic_ulong cnt_thread;
+    /// @brief Number of slots remaining for writing threads in this epoch
     atomic_ulong res_writes;
+    /// @brief indicate there is a writing thread in this epoch
+    atomic_bool is_writing;
 
     // TBD
 };
@@ -43,12 +50,13 @@ struct Word_str {
 
     // atomic_tx owner; 
 }; 
-typedef struct Word_str Word;
-// typedef uint8_t Word;
+// typedef struct Word_str Word;
+typedef uint8_t Word;
 
 struct Segment_str {
     // Batcher batcher;
     Word* data; 
+    Word* shadow; 
     size_t size; 
     atomic_tx owner; 
     struct Segment_str* next;

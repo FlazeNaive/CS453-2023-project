@@ -72,6 +72,7 @@ shared_t tm_create(size_t unused(size), size_t unused(align)) {
     atomic_store(&(region -> batcher.next), 0);
     atomic_store(&(region -> batcher.cnt_thread), 0);
     atomic_store(&(region -> batcher.cnt_epoch), 0);
+    atomic_store(&(region -> batcher.is_writing), false);
     atomic_store(&(region -> batcher.res_writes), batch_size);
 
     printf("END CREATE for MY\n");
@@ -225,28 +226,45 @@ bool tm_end(shared_t unused(shared), tx_t unused(tx)) {
         sched_yield();
 
 
-    ulong cnt_thread = atomic_fetch_sub(&(batcher.cnt_thread), 1);
-    if (cnt_thread == 1) {
-        // do cleanup for this epoch
-        // TODO
 
+    if (atomic_fetch_sub(&(batcher.cnt_thread), 1) == 1) {
+        // if at the end of the epoch, do cleanup
+        if (atomic_load(&(batcher.is_writing))) {
+            // if this epoch contains some writes
+            for (Segment* seg = region -> allocs; seg != NULL; seg = seg -> next) {
+                if (atomic_load(&(seg -> owner)) != read_only_tx) {
+                    // if this segment is owned by a read-write tx
+                    // TBD: commit the write
+                    // printf("committing write\n");
+                    memcpy(seg -> data, seg -> shadow, seg -> size * sizeof(Word));
+                }
+            }
+        } 
 
         // and start a new epoch
         atomic_fetch_add(&(batcher.cnt_epoch), 1);
         atomic_store(&(batcher.res_writes), batch_size);
+        atomic_store(&(batcher.is_writing), false);
 
         atomic_fetch_add(&(batcher.next), 1);
         return true;
     } else {
-        atomic_fetch_add(&(batcher.next), 1);
-        if (tx != read_only_tx) {
-
-
+        // not the end of epoch
+        if (tx == read_only_tx) {
+            // if read-only, just return
+            // noneed to block
+            return true; 
         } else {
+            // if is writing
+            // wait until the end of epoch 
+            // (after commit)
+            // to return
+            ulong this_epoch = get_epoch(&batcher);
+            while (this_epoch == get_epoch(&batcher))
+                sched_yield();
             return true;
-        }
+        } 
     }
-    
 
     #endif
 
@@ -318,13 +336,15 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void** target) {
     // allocate a new segment
     // Words are appended to the end of the segment
     Segment* seg; 
-    if (unlikely(posix_memalign((void**)&seg, align, sizeof(Segment) + sizeof(Word) * size) != 0)) {
+    if (unlikely(posix_memalign((void**)&seg, align, sizeof(Segment) 
+                                                     + sizeof(Word) * size * 2) != 0)) {
         return nomem_alloc;
     }
 
     memset(seg, 0, sizeof(Segment) + sizeof(Word) * size);
     seg -> data = (Word*)((uintptr_t)seg + sizeof(Segment));
-    memset(seg -> data, 0, size * sizeof(Word));
+    seg -> shadow = (Word*)((uintptr_t)seg + sizeof(Segment) + sizeof(Word) * size);
+    // memset(seg -> data, 0, size * sizeof(Word));
 
     // add owner and size
     atomic_store(&(seg -> owner), tx);
@@ -337,8 +357,8 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void** target) {
     region -> allocs = seg;
 
     *target = seg -> data;
-    if (seg -> data == NULL)
-        printf("failed to allocate\n");
+    // if (seg -> data == NULL)
+    //     printf("failed to allocate\n");
     return success_alloc;
 
     // return abort_alloc;
