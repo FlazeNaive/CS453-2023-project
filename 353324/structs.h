@@ -75,7 +75,7 @@ struct Region_str {
     size_t size;
     size_t align;
 
-    Batcher batcher;
+    Batcher *batcher;
     struct shared_lock_t lock;
     // TBD
 };

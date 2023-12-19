@@ -68,12 +68,13 @@ shared_t tm_create(size_t unused(size), size_t unused(align)) {
     }
 
     // TODO: create Batcher
-    atomic_store(&(region -> batcher.timestamp), 0);
-    atomic_store(&(region -> batcher.next), 0);
-    atomic_store(&(region -> batcher.cnt_thread), 0);
-    atomic_store(&(region -> batcher.cnt_epoch), 0);
-    atomic_store(&(region -> batcher.is_writing), false);
-    atomic_store(&(region -> batcher.res_writes), batch_size);
+    region -> batcher = (Batcher*)malloc(sizeof(Batcher));
+    atomic_store(&(region -> batcher -> timestamp), 0);
+    atomic_store(&(region -> batcher -> next), 0);
+    atomic_store(&(region -> batcher -> cnt_thread), 0);
+    atomic_store(&(region -> batcher -> cnt_epoch), 0);
+    atomic_store(&(region -> batcher -> is_writing), false);
+    atomic_store(&(region -> batcher -> res_writes), batch_size);
 
     printf("END CREATE for MY\n");
     return region; 
@@ -98,6 +99,7 @@ void tm_destroy(shared_t shared) {
     shared_lock_cleanup(&(region->lock));
     // ==============================
 
+    free(region -> batcher);
     free(region -> start);
     free(region);
 }
@@ -136,25 +138,26 @@ size_t tm_align(shared_t unused(shared)) {
  * @param is_ro  Whether the transaction is read-only
  * @return Opaque transaction ID, 'invalid_tx' on failure
 **/
-tx_t tm_begin(shared_t shared, bool is_ro) {
+tx_t tm_begin(shared_t shared, bool is_ro){
+
     printf("======\ntm_begin\n");
     Region *region = (Region*)shared;
 
     #ifdef _TO_USE_BATCHER_
-    Batcher batcher = region -> batcher;
-    tx_t process_idx = atomic_fetch_add(&(batcher.timestamp), 1);
+    Batcher *batcher = region -> batcher;
+    tx_t process_idx = atomic_fetch_add(&(batcher->timestamp), 1);
 
-    while (process_idx != atomic_load(&(batcher.next)))
+    while (process_idx != atomic_load(&(batcher->next)))
         sched_yield();
     #endif
 
     if (is_ro) {
-        // printf("tm_begin: is_ro\n");
+        printf("tm_begin: is_ro\n");
         
         #ifdef _TO_USE_BATCHER_
 
-        atomic_fetch_add(&(batcher.cnt_thread), 1);
-        atomic_fetch_add(&(batcher.next), 1);
+        atomic_fetch_add(&(batcher->cnt_thread), 1);
+        atomic_fetch_add(&(batcher->next), 1);
 
         return read_only_tx;
         #endif
@@ -167,29 +170,34 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
         }
         return read_only_tx;
     } else {
-        // printf("tm_begin: is_rw\n");
+        printf("tm_begin: is_rw\n");
 
         #ifdef _TO_USE_BATCHER_
 
         while(true) {
-            if (atomic_load(&(batcher.res_writes)) != 0) {
-                atomic_fetch_sub(&(batcher.res_writes), 1);
+            if (atomic_load(&(batcher->res_writes)) != 0) 
+            {
+                // printf("tm_begin: is_rw: res_writes: %lu\n", 
+                atomic_fetch_add(&(batcher->res_writes), -1)
+                ;
+                // );
                 break; 
             }
 
             // skip and wait for next epoch, process with new idx
-            atomic_fetch_add(&(batcher.timestamp), 1);
+            atomic_fetch_add(&(batcher->next), 1);
 
-            ulong this_epoch = get_epoch(&batcher);
-            while (this_epoch == get_epoch(&batcher))
+            ulong this_epoch = get_epoch(batcher);
+            while (this_epoch == get_epoch(batcher))
                 sched_yield();
             
-            process_idx = atomic_fetch_add(&(batcher.timestamp), 1);
-            while (process_idx != atomic_load(&(batcher.next)))
+            process_idx = atomic_fetch_add(&(batcher->timestamp), 1);
+            while (process_idx != atomic_load(&(batcher->next)))
                 sched_yield();
         } 
         
-        ulong tx_idx = atomic_fetch_add(&(batcher.cnt_thread), 1);
+        ulong tx_idx = atomic_fetch_add(&(batcher->cnt_thread), 1) + 1;
+        atomic_fetch_add(&(batcher->next), 1);
 
         return tx_idx; 
 
@@ -220,15 +228,16 @@ bool tm_end(shared_t shared, tx_t tx) {
 
     #ifdef _TO_USE_BATCHER_
 
-    Batcher batcher = region -> batcher;
-    ulong process_idx = atomic_fetch_add(&(batcher.timestamp), 1);
-    while (process_idx != atomic_load(&(batcher.next)))
+    Batcher *batcher = region -> batcher;
+    ulong process_idx = atomic_fetch_add(&(batcher->timestamp), 1);
+
+    while (process_idx != atomic_load(&(batcher->next)))
         sched_yield();
 
-
-    if (atomic_fetch_sub(&(batcher.cnt_thread), 1) == 1) {
+    if (atomic_fetch_add(&(batcher->cnt_thread), -1) == 1) {
+        printf("last of this epoch\n"); 
         // if at the end of the epoch, do cleanup
-        if (atomic_load(&(batcher.is_writing))) {
+        if (atomic_load(&(batcher->is_writing))) {
             // if this epoch contains some writes
             for (Segment* seg = region -> allocs; seg != NULL; seg = seg -> next) {
                 if (atomic_load(&(seg -> to_delete))){
@@ -246,11 +255,11 @@ bool tm_end(shared_t shared, tx_t tx) {
         } 
 
         // and start a new epoch
-        atomic_fetch_add(&(batcher.cnt_epoch), 1);
-        atomic_store(&(batcher.res_writes), batch_size);
-        atomic_store(&(batcher.is_writing), false);
+        atomic_fetch_add(&(batcher->cnt_epoch), 1);
+        atomic_store(&(batcher->res_writes), batch_size);
+        atomic_store(&(batcher->is_writing), false);
 
-        atomic_fetch_add(&(batcher.next), 1);
+        atomic_fetch_add(&(batcher->next), 1);
         return true;
     } else {
         // not the end of epoch
@@ -263,8 +272,8 @@ bool tm_end(shared_t shared, tx_t tx) {
             // wait until the end of epoch 
             // (after commit)
             // to return
-            ulong this_epoch = get_epoch(&batcher);
-            while (this_epoch == get_epoch(&batcher))
+            ulong this_epoch = get_epoch(batcher);
+            while (this_epoch == get_epoch(batcher))
                 sched_yield();
             return true;
         } 
