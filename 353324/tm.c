@@ -137,7 +137,7 @@ size_t tm_align(shared_t unused(shared)) {
  * @return Opaque transaction ID, 'invalid_tx' on failure
 **/
 tx_t tm_begin(shared_t shared, bool is_ro) {
-    // printf("======\ntm_begin\n");
+    printf("======\ntm_begin\n");
     Region *region = (Region*)shared;
 
     #ifdef _TO_USE_BATCHER_
@@ -215,7 +215,7 @@ tx_t tm_begin(shared_t shared, bool is_ro) {
  * @return Whether the whole transaction committed
 **/
 bool tm_end(shared_t shared, tx_t tx) {
-    // TODO: tm_end(shared_t, tx_t)
+    printf("======\ntm_end\n");
     Region* region = (Region*)shared;
 
     #ifdef _TO_USE_BATCHER_
@@ -294,7 +294,7 @@ bool tm_end(shared_t shared, tx_t tx) {
 **/
 bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
     // TODO: tm_read(shared_t, tx_t, void const*, size_t, void*)
-    // printf("start tm_read\n");
+    printf("start tm_read\n");
     #ifdef _TO_USE_BATCHER_
     Region *region = (Region*)shared;
     if (tx == read_only_tx) {
@@ -311,7 +311,7 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
 
     size_t cnt_word = size / sizeof(Word);
     size_t offset = ((uintptr_t)source - (uintptr_t)seg -> data)/sizeof(Word);
-    for (int i = 0; i < cnt_word; ++i) {
+    for (size_t i = 0; i < cnt_word; ++i) {
         atomic_tx * control = seg -> control + offset + i;
         tx_t expected = it_is_free;
         if (tx == atomic_load(control)) {
@@ -354,6 +354,7 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
 **/
 bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
     // TODO: tm_write(shared_t, tx_t, void const*, size_t, void*)
+    printf("start tm_write\n");
     #ifdef _TO_USE_BATCHER_
 
     Region *region = (Region*)shared;
@@ -394,7 +395,7 @@ bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* t
 **/
 alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void** target) {
     // TODO: tm_alloc(shared_t, tx_t, size_t, void**)
-    // printf("start tm_alloc\n");
+    printf("start tm_alloc\n");
     Region *region = (Region*)shared;
     size_t align = region -> align;
 
@@ -402,18 +403,18 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void** target) {
     // Words are appended to the end of the segment
     Segment* seg; 
     if (unlikely(posix_memalign((void**)&seg, align, sizeof(Segment) 
-                                                     + sizeof(tx_t) * size
+                                                     + sizeof(atomic_tx) * size
                                                      + sizeof(Word) * size * 2) != 0)) 
     {
         return nomem_alloc;
     }
     memset(seg, 0, sizeof(Segment) 
-                   + sizeof(tx_t) * size 
+                   + sizeof(atomic_tx) * size 
                    + sizeof(Word) * size * 2 );
 
-    seg -> data = (tx_t*)((uintptr_t)seg + sizeof(Segment));
+    seg -> data = (Word*)((uintptr_t)seg + sizeof(Segment));
     seg -> shadow = (Word*)((uintptr_t)seg -> data + sizeof(Word) * size);
-    seg -> control = (Word*)((uintptr_t)seg -> shadow + sizeof(Word) * size);
+    seg -> control = (atomic_tx*)((uintptr_t)seg -> shadow + sizeof(Word) * size);
     // memset(seg -> data, 0, size * sizeof(Word));
 
     // add creator and size
@@ -429,6 +430,7 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void** target) {
     *target = seg -> data;
     // if (seg -> data == NULL)
     //     printf("failed to allocate\n");
+    printf("end tm_alloc\n");
     return success_alloc;
 
     // return abort_alloc;

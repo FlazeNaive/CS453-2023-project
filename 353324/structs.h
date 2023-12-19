@@ -52,13 +52,13 @@ struct Word_str {
 
 }; 
 // typedef struct Word_str Word;
-typedef uint8_t Word;
+typedef _Atomic(uint8_t) Word;
 
 struct Segment_str {
     // Batcher batcher;
     Word* data; 
     Word* shadow; 
-    tx_t* control;
+    atomic_tx* control;
     size_t size; 
     /// @brief actually it's the creator of this segment
     atomic_tx creator; 

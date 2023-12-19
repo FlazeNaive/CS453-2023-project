@@ -23,7 +23,7 @@ static inline Segment* findSegment(const Region * region, const void* source) {
     return NULL;
 }
 
-static inline void* Undo(const Region * region, const tx_t tx) {
+static inline void Undo(Region * region, const tx_t tx) {
     for (Segment* segment = region -> allocs; segment != NULL; segment = segment -> next) {
         if (atomic_load(&(segment -> to_delete)) )
             continue;
@@ -46,10 +46,10 @@ static inline void* Undo(const Region * region, const tx_t tx) {
             }
         }
     }
-    tm_end(region, tx);
+    tm_end((void*)region, tx);
 }
 
-static inline bool try_write(const Region *region, const Segment* seg, tx_t tx, const void* target, const size_t size) {
+static inline bool try_write(const Region * unused(region), const Segment* seg, tx_t tx, const void* target, const size_t size) {
     ulong offset = ((uintptr_t)target - (uintptr_t)seg -> data)/sizeof(Word);
     for (size_t i = 0; i < size; ++i) {
         atomic_tx * control = seg -> control + offset + i;
