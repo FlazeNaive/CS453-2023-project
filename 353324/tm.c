@@ -310,7 +310,7 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
     }
 
     size_t cnt_word = size / sizeof(Word);
-    size_t offset = (uintptr_t)source - (uintptr_t)seg -> data;
+    size_t offset = ((uintptr_t)source - (uintptr_t)seg -> data)/sizeof(Word);
     for (int i = 0; i < cnt_word; ++i) {
         atomic_tx * control = seg -> control + offset + i;
         tx_t expected = it_is_free;
@@ -352,12 +352,31 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
  * @param target Target start address (in the shared region)
  * @return Whether the whole transaction can continue
 **/
-bool tm_write(shared_t unused(shared), tx_t unused(tx), void const* source, size_t size, void* target) {
+bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
     // TODO: tm_write(shared_t, tx_t, void const*, size_t, void*)
-    if (source == NULL) printf("source is NULL\n");
-    if (target == NULL) printf("target is NULL\n");
-    if (source == NULL || target == NULL) return false;
+    #ifdef _TO_USE_BATCHER_
 
+    Region *region = (Region*)shared;
+    Segment *seg = findSegment(region, target);
+    if (seg == NULL || atomic_load(&(seg -> to_delete))) {
+        // printf("tm_write: seg is NULL\n");
+        Undo(region, tx); 
+        return false;
+    }
+    if (!try_write(region, seg, tx, target, size)) {
+        // printf("tm_write: can_write failed\n");
+        Undo(region, tx); 
+        return false;
+    }
+
+    ulong offset = ((uintptr_t)target - (uintptr_t)seg -> data)/sizeof(Word);
+    memcpy(seg -> shadow + offset,
+            source, 
+            size * sizeof(Word));
+
+    #endif
+    // ==============================
+    // ==== reference implementation
     // printf("start tm_write %x -> %x \n", source, target);
     memcpy(target, source, size);
     // printf("end tm_write\n");

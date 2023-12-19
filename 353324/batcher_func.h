@@ -14,7 +14,8 @@
 static inline Segment* findSegment(const Region * region, const void* source) {
     Segment* seg = region -> allocs;
     while(seg != NULL) {
-        if (seg -> data <= source && source < seg -> data + seg -> size) {
+        if (((Word*)seg -> data) <= ((Word*)source )
+            && ((Word*)source) < (seg -> data) + seg -> size) {
             return seg;
         }
         seg = seg -> next;
@@ -46,6 +47,24 @@ static inline void* Undo(const Region * region, const tx_t tx) {
         }
     }
     tm_end(region, tx);
+}
+
+static inline bool try_write(const Region *region, const Segment* seg, tx_t tx, const void* target, const size_t size) {
+    ulong offset = ((uintptr_t)target - (uintptr_t)seg -> data)/sizeof(Word);
+    for (size_t i = 0; i < size; ++i) {
+        atomic_tx * control = seg -> control + offset + i;
+        if (atomic_load(control) != it_is_free 
+            && atomic_load(control) != tx 
+            && atomic_load(control) != tx + batch_size
+            ) {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < size; ++i) {
+        atomic_tx * control = seg -> control + offset + i;
+        atomic_store(control, tx);
+    }
+    return true;
 }
 
 #endif

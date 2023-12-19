@@ -42,7 +42,7 @@ struct Batcher_str{
 typedef struct Batcher_str Batcher; 
 // ==============================
 // Batcher Functions
-static inline atomic_ulong get_epoch(const Batcher* batcher) { return atomic_load(&(batcher -> cnt_epoch)); }
+static inline ulong get_epoch(const Batcher* batcher) { return atomic_load(&(batcher -> cnt_epoch)); }
 
 
 struct Word_str {

@@ -10,6 +10,7 @@ Briefly, it's like the structure as:
   3. shadow [Word * size]
   4. control [tx_t * size]
 The alloc will return the address of `data`. 
+The `data` should be the readable copy. 
 But the write should first write to `shadow`, and at the end of each epoch, copy the data from `shadow` to `data`. 
 
 
