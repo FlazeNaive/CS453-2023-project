@@ -3,7 +3,7 @@
 #ifndef _BATCHER_H_
 #define _BATCHER_H_
 
-#define _DEBUG_FLZ_
+// #define _DEBUG_FLZ_
 // #define _DEBUG_FLZ_TEST_READ_
 // #define _DEBUG_FLZ_TEST_WRITE_
 
