@@ -299,18 +299,9 @@ bool tm_end(shared_t shared, tx_t tx) {
         && atomic_load(&(batcher -> is_writing))
         ) {
             // if this epoch contains some writes
+            Commit_seg(region, region -> start); 
             for (Segment* seg = region -> allocs; seg != NULL; seg = seg -> next) {
-                if (atomic_load(&(seg -> to_delete))){
-                    tm_free(region, seg -> creator, seg); 
-                    continue; 
-                }
-                // commit all writes
-                // from shadow to data
-                memcpy(seg -> data, seg -> shadow, seg -> size * sizeof(Word));
-                // and reset control
-                memset(seg -> control, 0, seg -> size * sizeof(tx_t));
-                // and it will not get reset in the following epoches
-                atomic_store(&(seg -> creator), it_is_free); 
+                Commit_seg(region, seg);
             }
             // and start a new epoch
             atomic_store(&(batcher->res_writes), batch_size);
@@ -477,7 +468,7 @@ bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* t
 
     // TODO: tm_write(shared_t, tx_t, void const*, size_t, void*)
         #ifdef _DEBUG_FLZ_
-        printf("start tm_write %lu byte\n", size);
+        printf("tm_writing %lu byte\n", size);
         #endif
 
     #ifdef _TO_USE_BATCHER_
