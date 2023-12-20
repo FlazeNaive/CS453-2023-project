@@ -37,14 +37,14 @@ static inline Segment* findSegment(const Region * region, const void* source) {
             printf("Segment -> data: %p\n", seg -> data); 
             #endif
 
-        if (((Word*)seg -> data) <= ((Word*)source )
-             && (Word*)source < ((Word*)seg -> shadow))
-            // && ((Word*)source) < (seg -> data) + seg -> size) 
+        if ((Word* )seg -> data <= (Word*)source 
+             && (Word*)source < (Word*)seg -> shadow)
         {
             return seg;
         }
         seg = seg -> next;
     }
+
     return NULL;
 }
 

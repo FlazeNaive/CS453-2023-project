@@ -178,7 +178,7 @@ size_t tm_align(shared_t unused(shared)) {
 tx_t tm_begin(shared_t shared, bool is_ro){
         #ifdef _DEBUG_FLZ_
         if (is_ro) {
-            printf("RORORORORORO!!!!!"); 
+            printf("RORORORORORO!!!!!\n"); 
             // return ;
         }
 
@@ -209,6 +209,7 @@ tx_t tm_begin(shared_t shared, bool is_ro){
         atomic_fetch_add(&(batcher->next), 1);
 
         return read_only_tx;
+
         #endif
 
         // ==============================
@@ -218,58 +219,57 @@ tx_t tm_begin(shared_t shared, bool is_ro){
             return invalid_tx;
         }
         return read_only_tx;
-    } else {
+    } 
 
-        #ifdef _TO_USE_BATCHER_
+    #ifdef _TO_USE_BATCHER_
 
-        while(true) {
-            tx_t process_idx = atomic_fetch_add(&(batcher->timestamp), 1);
+    while(true) {
+        tx_t process_idx = atomic_fetch_add(&(batcher->timestamp), 1);
 
-                #ifdef _DEBUG_FLZ_
-                printf("tm_begin: is_rw, process: %lu\n", process_idx);
-                #endif
+            #ifdef _DEBUG_FLZ_
+            printf("tm_begin: is_rw, process: %lu\n", process_idx);
+            printf("current next: %lu\n", atomic_load(&(batcher->next)));
+            #endif
 
 
-            while (process_idx != atomic_load(&(batcher->next)))
-                sched_yield();
+        while (process_idx != atomic_load(&(batcher->next)))
+            sched_yield();
 
-            if (atomic_load(&(batcher->res_writes)) != 0) 
-            {
-                // printf("tm_begin: is_rw, process: %lu\n\t\t: res_writes: %lu\n", process_idx, atomic_load(&(batcher->res_writes)));
-                atomic_fetch_add(&(batcher->res_writes), -1)
-                ;
-                // );
-                break; 
-            }
+        if (atomic_load(&(batcher->res_writes)) != 0) 
+        {
+            // printf("tm_begin: is_rw, process: %lu\n\t\t: res_writes: %lu\n", process_idx, atomic_load(&(batcher->res_writes)));
+            atomic_fetch_add(&(batcher->res_writes), -1)
+            ;
+            // );
+            break; 
+        }
 
-            // skip and wait for next epoch, process with new idx
-            atomic_fetch_add(&(batcher->next), 1);
-
-            ulong this_epoch = get_epoch(batcher);
-            while (this_epoch == get_epoch(batcher))
-                sched_yield();
-            
-            process_idx = atomic_fetch_add(&(batcher->timestamp), 1);
-        } 
-        
-        ulong tx_idx = atomic_fetch_add(&(batcher->cnt_thread), 1) + 1;
-
-        atomic_store(&(batcher->is_writing), true);
+        // skip and wait for next epoch, process with new idx
         atomic_fetch_add(&(batcher->next), 1);
 
-        return tx_idx; 
+        ulong this_epoch = get_epoch(batcher);
+        while (this_epoch == get_epoch(batcher))
+            sched_yield();
+        
+    } 
+    
+    ulong tx_idx = atomic_fetch_add(&(batcher->cnt_thread), 1) + 1;
 
-        #endif
+    atomic_store(&(batcher->is_writing), true);
+    atomic_fetch_add(&(batcher->next), 1);
 
-        // ==============================
-        // ==== reference implementation
+    return tx_idx; 
 
-        if (unlikely(!shared_lock_acquire(&(region ->lock)))){
-            printf("tm_begin: is_rw: failed\n");
-            return invalid_tx;
-        }
-        return read_write_tx;
+    #endif
+
+    // ==============================
+    // ==== reference implementation
+
+    if (unlikely(!shared_lock_acquire(&(region ->lock)))){
+        printf("tm_begin: is_rw: failed\n");
+        return invalid_tx;
     }
+    return read_write_tx;
     // ==============================
 
     return invalid_tx;
@@ -407,9 +407,9 @@ bool tm_end(shared_t shared, tx_t tx) {
 **/
 bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
     // TODO: tm_read(shared_t, tx_t, void const*, size_t, void*)
-        #ifdef _DEBUG_FLZ_
-        printf("start tm_read\n");
-        #endif
+        // #ifdef _DEBUG_FLZ_
+        // printf("start tm_read\n");
+        // #endif
 
     #ifdef _TO_USE_BATCHER_
     Region *region = (Region*)shared;
