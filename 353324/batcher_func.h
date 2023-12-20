@@ -57,7 +57,7 @@ static inline void Undo_seg(Segment* segment, const tx_t tx) {
         return; 
     }
     for (size_t i = 0; i < segment -> size; ++i) {
-        atomic_tx * control = segment -> control + i;
+        char * control = segment -> control + i;
         if (atomic_load(control) == tx) {
             atomic_store(control, it_is_free);
             // undo the write
@@ -65,7 +65,7 @@ static inline void Undo_seg(Segment* segment, const tx_t tx) {
         } 
         else {
             // if we did the read
-            tx_t we_read_tx = tx + batch_size;
+            char we_read_tx = tx + batch_size;
             atomic_compare_exchange_strong(control, &we_read_tx, it_is_free);
         }
     }
@@ -101,7 +101,7 @@ static inline void Commit_seg(Region* region, Segment* seg) {
 
     memcpy(seg -> data, seg -> shadow, seg -> size * sizeof(Word));
     // and reset control
-    memset(seg -> control, 0, seg -> size * sizeof(tx_t));
+    memset(seg -> control, 0, seg -> size * sizeof(char));
     // and it will not get reset in the following epoches
     atomic_store(&(seg -> creator), it_is_free); 
 }
@@ -119,7 +119,7 @@ static inline bool try_write(Region * unused(region), Segment* seg, tx_t tx, voi
         #endif
 
     for (size_t i = 0; i < size; ++i) {
-        atomic_tx * control = seg -> control + offset + i;
+        char * control = seg -> control + offset + i;
         if (atomic_load(control) != it_is_free 
             && atomic_load(control) != tx 
             && atomic_load(control) != tx + batch_size
@@ -127,10 +127,12 @@ static inline bool try_write(Region * unused(region), Segment* seg, tx_t tx, voi
             return false;
         }
     }
-    for (size_t i = 0; i < size; ++i) {
-        atomic_tx * control = seg -> control + offset + i;
-        atomic_store(control, tx);
-    }
+    // for (size_t i = 0; i < size; ++i) {
+    //     char * control = seg -> control + offset + i;
+    //     atomic_store(control, tx);
+    // }
+    memset(seg -> control + offset, (char)tx, size);
+
 
         #ifdef _DEBUG_FLZ_TEST_LOCK_
         printf("[after]control of: %p is: ", target);

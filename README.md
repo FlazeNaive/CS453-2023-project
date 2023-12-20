@@ -8,7 +8,7 @@ Briefly, it's like the structure as:
   1. header
   2. data [Word * size]
   3. shadow [Word * size]
-  4. control [tx_t * size]
+  4. control [char * size]
 The alloc will return the address of `data`. 
 The `data` should be the readable copy. 
 But the write should first write to `shadow`, and at the end of each epoch, copy the data from `shadow` to `data`. 

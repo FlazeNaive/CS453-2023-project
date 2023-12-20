@@ -58,7 +58,7 @@ struct Segment_str {
     // Batcher batcher;
     Word* data; 
     Word* shadow; 
-    atomic_tx* control;
+    char* control;
     size_t size; 
     /// @brief actually it's the creator of this segment
     atomic_tx creator; 

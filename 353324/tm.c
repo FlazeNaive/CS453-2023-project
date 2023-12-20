@@ -61,7 +61,7 @@ shared_t tm_create(size_t unused(size), size_t unused(align)) {
 
     // alloc the start
     if (unlikely(posix_memalign((void**)&region -> start, align, sizeof(Segment) 
-                                                     + sizeof(atomic_tx) * size
+                                                     + sizeof(char) * size
                                                      + sizeof(Word) * size * 2) != 0)) 
     {
         free(region);
@@ -69,7 +69,7 @@ shared_t tm_create(size_t unused(size), size_t unused(align)) {
     }
 
     memset(region -> start, 0, sizeof(Segment) 
-                   + sizeof(atomic_tx) * size 
+                   + sizeof(char) * size 
                    + sizeof(Word) * size * 2 );
 
     region -> start -> data    =      (Word*)((uintptr_t)region -> start + sizeof(Segment));
@@ -441,8 +441,8 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
 
 
     for (size_t i = 0; i < cnt_word; ++i) {
-        atomic_tx * control = seg -> control + offset + i;
-        tx_t expected = it_is_free;
+        char* control = seg -> control + offset + i;
+        char expected = it_is_free;
         if (tx == atomic_load(control)) {
             memcpy(((Word*) target) + i , 
                     seg -> shadow + offset + i, 
@@ -566,7 +566,7 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void** target) {
 
     seg -> data = (Word*)((uintptr_t)seg + sizeof(Segment));
     seg -> shadow = (Word*)((uintptr_t)seg -> data + sizeof(Word) * size);
-    seg -> control = (atomic_tx*)((uintptr_t)seg -> shadow + sizeof(Word) * size);
+    seg -> control = (char*)((uintptr_t)seg -> shadow + sizeof(Word) * size);
     // memset(seg -> data, 0, size * sizeof(Word));
 
     // add creator and size
