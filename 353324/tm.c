@@ -19,7 +19,7 @@
 #endif
 
 #define _TO_USE_BATCHER_ 
-#define _DEBUG_FLZ_ 
+// #define _DEBUG_FLZ_ 
 
 // External headers
 #include <stddef.h>
@@ -298,7 +298,10 @@ bool tm_end(shared_t shared, tx_t tx) {
     if (atomic_fetch_add(&(batcher->cnt_thread), -1) == 1
         && atomic_load(&(batcher -> is_writing))
         ) {
-            printf("ITS THE END OF EPOCH: %lu\n", atomic_load(&(batcher->cnt_epoch)));
+                #ifdef _DEBUG_FLZ_
+                printf("ITS THE END OF EPOCH: %lu\n", atomic_load(&(batcher->cnt_epoch)));
+                #endif
+
             // if this epoch contains some writes
             Commit_seg(region, region -> start); 
             for (Segment* seg = region -> allocs; seg != NULL; seg = seg -> next) {
@@ -406,7 +409,9 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
     #ifdef _TO_USE_BATCHER_
     Region *region = (Region*)shared;
 
-    printf("tm_read: %p -> %p\n", source, target);
+        #ifdef _DEBUG_FLZ_
+        printf("tm_read: %p -> %p\n", source, target);
+        #endif
 
     if (tx == read_only_tx) {
         memcpy(target, source, size);
@@ -423,9 +428,13 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
     size_t cnt_word = size / sizeof(Word);
     size_t offset = ((uintptr_t)source - (uintptr_t)seg -> data)/sizeof(Word);
     
-    printf("tm_read: %p -> %p, offset: %lu, cnt_word: %lu\n", source, target, offset, cnt_word);
-    printf("base address of data: %p\n", seg -> data);
-    printf("base address of shadow: %p\n", seg -> shadow);
+        #ifdef _DEBUG_FLZ_
+        printf("tm_read: %p -> %p, offset: %lu, cnt_word: %lu\n", source, target, offset, cnt_word);
+        printf("base address of data: %p\n", seg -> data);
+        printf("base address of shadow: %p\n", seg -> shadow);
+        #endif
+
+
     for (size_t i = 0; i < cnt_word; ++i) {
         atomic_tx * control = seg -> control + offset + i;
         tx_t expected = it_is_free;
@@ -484,12 +493,12 @@ bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* t
     Region *region = (Region*)shared;
     Segment *seg = findSegment(region, target);
     if (seg == NULL || atomic_load(&(seg -> to_delete))) {
-        printf("tm_write: seg is NULL\n");
+        // printf("tm_write: seg is NULL\n");
         Undo(region, tx); 
         return false;
     }
     if (!try_write(region, seg, tx, target, size)) {
-        printf("tm_write: can_write failed\n");
+        // printf("tm_write: lock_write failed\n");
         Undo(region, tx); 
         return false;
     }

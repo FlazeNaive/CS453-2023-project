@@ -3,7 +3,6 @@
 #ifndef _BATCHER_H_
 #define _BATCHER_H_
 
-#define _DEBUG_FLZ_
 
 
 #include <string.h>
@@ -15,21 +14,30 @@
 #include <tm.h>
 
 static inline Segment* findSegment(const Region * region, const void* source) {
-    // printf("Looking for %p\n", source);
+        #ifdef _DEBUG_FLZ_
+        printf("Looking for %p\n", source);
 
+        printf("region -> start -> data: %p\n", region -> start -> data);
+        #endif
 
-    Segment* seg = region -> allocs;
-
-    if ((Word*)region -> start <= (Word*)source
-        && (Word*)source < (Word*)region -> start + region -> start -> size) {
+    if ((Word*)(region -> start -> data) <= (Word*)source
+            && (Word*)source < (Word*)region -> start -> shadow)
+        // && (Word*)source < (Word*)region -> ((Word*)(start -> data)) 
+        //                                            + region -> start -> size)
+        {
             return region -> start; 
         }
+
+    Segment* seg = region -> allocs;
     while(seg != NULL) {
             #ifdef _DEBUG_FLZ_
             printf("Segment -> data: %p\n", seg -> data); 
             #endif
+
         if (((Word*)seg -> data) <= ((Word*)source )
-            && ((Word*)source) < (seg -> data) + seg -> size) {
+             && (Word*)source < ((Word*)seg -> shadow))
+            // && ((Word*)source) < (seg -> data) + seg -> size) 
+        {
             return seg;
         }
         seg = seg -> next;
