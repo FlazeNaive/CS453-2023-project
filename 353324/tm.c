@@ -219,12 +219,17 @@ tx_t tm_begin(shared_t shared, bool is_ro){
         }
         return read_only_tx;
     } else {
-        // printf("tm_begin: is_rw, process: %lu\n", process_idx);
 
         #ifdef _TO_USE_BATCHER_
 
         while(true) {
             tx_t process_idx = atomic_fetch_add(&(batcher->timestamp), 1);
+
+                #ifdef _DEBUG_FLZ_
+                printf("tm_begin: is_rw, process: %lu\n", process_idx);
+                #endif
+
+
             while (process_idx != atomic_load(&(batcher->next)))
                 sched_yield();
 
@@ -409,9 +414,9 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
     #ifdef _TO_USE_BATCHER_
     Region *region = (Region*)shared;
 
-        #ifdef _DEBUG_FLZ_
-        printf("tm_read: %p -> %p\n", source, target);
-        #endif
+        // #ifdef _DEBUG_FLZ_
+        // printf("tm_read: %p -> %p\n", source, target);
+        // #endif
 
     if (tx == read_only_tx) {
         memcpy(target, source, size);
@@ -428,7 +433,7 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
     size_t cnt_word = size / sizeof(Word);
     size_t offset = ((uintptr_t)source - (uintptr_t)seg -> data)/sizeof(Word);
     
-        #ifdef _DEBUG_FLZ_
+        #ifdef _DEBUG_FLZ_TEST_READ_
         printf("tm_read: %p -> %p, offset: %lu, cnt_word: %lu\n", source, target, offset, cnt_word);
         printf("base address of data: %p\n", seg -> data);
         printf("base address of shadow: %p\n", seg -> shadow);
@@ -476,7 +481,7 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
  * @param target Target start address (in the shared region)
  * @return Whether the whole transaction can continue
 **/
-static int countttt = 0;
+// static int countttt = 0;
 
 bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
     // ++countttt; 
@@ -503,9 +508,9 @@ bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* t
         return false;
     }
 
-        #ifdef _DEBUG_FLZ_
-        // printf("tm_write: %p -> (data)%p, (shadow)%p \n", source, target, 
-        //                                                   ((Word*) target) + (seg -> size) * sizeof(Word));
+        #ifdef _DEBUG_FLZ_TEST_WRITE_
+        printf("tm_write: %p -> (data)%p, (shadow)%p \n", source, target, 
+                                                          ((Word*) target) + (seg -> size) * sizeof(Word));
         #endif
 
     // ulong offset = ((uintptr_t)target - (uintptr_t)seg -> data)/sizeof(Word);

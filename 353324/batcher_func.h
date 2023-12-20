@@ -3,6 +3,9 @@
 #ifndef _BATCHER_H_
 #define _BATCHER_H_
 
+#define _DEBUG_FLZ_
+// #define _DEBUG_FLZ_TEST_READ_
+// #define _DEBUG_FLZ_TEST_WRITE_
 
 
 #include <string.h>
@@ -14,7 +17,7 @@
 #include <tm.h>
 
 static inline Segment* findSegment(const Region * region, const void* source) {
-        #ifdef _DEBUG_FLZ_
+        #ifdef _DEBUG_FLZ_TEST_FIND_
         printf("Looking for %p\n", source);
 
         printf("region -> start -> data: %p\n", region -> start -> data);
@@ -30,7 +33,7 @@ static inline Segment* findSegment(const Region * region, const void* source) {
 
     Segment* seg = region -> allocs;
     while(seg != NULL) {
-            #ifdef _DEBUG_FLZ_
+            #ifdef _DEBUG_FLZ_TEST_FIND_
             printf("Segment -> data: %p\n", seg -> data); 
             #endif
 
