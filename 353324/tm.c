@@ -149,7 +149,7 @@ void* tm_start(shared_t unused(shared)) {
     // TODO: tm_start(shared_t)
     // return NULL;
     Region *region = (Region*)shared;
-    return region -> start;
+    return region -> start -> data;
 }
 
 /** [thread-safe] Return the size (in bytes) of the first allocated segment of the shared memory region.
@@ -277,7 +277,7 @@ tx_t tm_begin(shared_t shared, bool is_ro){
 **/
 bool tm_end(shared_t shared, tx_t tx) {
         #ifdef _DEBUG_FLZ_
-        printf("======\ntm_end\n");
+        printf("tm_end\n======\n");
         #endif
 
     Region* region = (Region*)shared;
@@ -298,6 +298,7 @@ bool tm_end(shared_t shared, tx_t tx) {
     if (atomic_fetch_add(&(batcher->cnt_thread), -1) == 1
         && atomic_load(&(batcher -> is_writing))
         ) {
+            printf("ITS THE END OF EPOCH: %lu\n", atomic_load(&(batcher->cnt_epoch)));
             // if this epoch contains some writes
             Commit_seg(region, region -> start); 
             for (Segment* seg = region -> allocs; seg != NULL; seg = seg -> next) {
@@ -398,12 +399,15 @@ bool tm_end(shared_t shared, tx_t tx) {
 **/
 bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
     // TODO: tm_read(shared_t, tx_t, void const*, size_t, void*)
-    #ifdef _DEBUG_FLZ_
-    printf("start tm_read\n");
-    #endif
+        #ifdef _DEBUG_FLZ_
+        printf("start tm_read\n");
+        #endif
 
     #ifdef _TO_USE_BATCHER_
     Region *region = (Region*)shared;
+
+    printf("tm_read: %p -> %p\n", source, target);
+
     if (tx == read_only_tx) {
         memcpy(target, source, size);
         return true;
@@ -418,6 +422,10 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
 
     size_t cnt_word = size / sizeof(Word);
     size_t offset = ((uintptr_t)source - (uintptr_t)seg -> data)/sizeof(Word);
+    
+    printf("tm_read: %p -> %p, offset: %lu, cnt_word: %lu\n", source, target, offset, cnt_word);
+    printf("base address of data: %p\n", seg -> data);
+    printf("base address of shadow: %p\n", seg -> shadow);
     for (size_t i = 0; i < cnt_word; ++i) {
         atomic_tx * control = seg -> control + offset + i;
         tx_t expected = it_is_free;
@@ -467,9 +475,9 @@ bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* t
     //     return false;
 
     // TODO: tm_write(shared_t, tx_t, void const*, size_t, void*)
-        #ifdef _DEBUG_FLZ_
-        printf("tm_writing %lu byte\n", size);
-        #endif
+        // #ifdef _DEBUG_FLZ_
+        // printf("tm_writing %lu byte\n", size);
+        // #endif
 
     #ifdef _TO_USE_BATCHER_
 
@@ -486,13 +494,17 @@ bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* t
         return false;
     }
 
-    // printf("tm_write: %x -> %x \n", source, target);
+        #ifdef _DEBUG_FLZ_
+        // printf("tm_write: %p -> (data)%p, (shadow)%p \n", source, target, 
+        //                                                   ((Word*) target) + (seg -> size) * sizeof(Word));
+        #endif
 
     // ulong offset = ((uintptr_t)target - (uintptr_t)seg -> data)/sizeof(Word);
     // memcpy(seg -> shadow + offset,
     //         source, 
     //         size * sizeof(Word));
-    memcpy((char*) target + (seg -> size) * sizeof(Word),
+    memcpy(((Word*) target) + (seg -> size) * sizeof(Word), 
+                            // to the shadow
             source,
             size * sizeof(Word));
     return true; 

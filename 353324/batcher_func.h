@@ -77,6 +77,17 @@ static inline void Commit_seg(Region* region, Segment* seg) {
     }
     // commit all writes
     // from shadow to data
+
+
+        // #ifdef _DEBUG_FLZ_
+        // printf("\n\nsegment address: %p\n", seg);
+        // printf("size(Segment Header): %lu\n", sizeof(Segment));
+        // printf("segment -> size: %lu\n", seg -> size);
+        // printf("size(Word): %lu\n", sizeof(Word));
+        // printf("Commiting %p -> %p\n", seg->shadow, seg -> data);
+        // #endif
+
+
     memcpy(seg -> data, seg -> shadow, seg -> size * sizeof(Word));
     // and reset control
     memset(seg -> control, 0, seg -> size * sizeof(tx_t));
