@@ -70,7 +70,8 @@ struct Segment_str {
 typedef struct Segment_str Segment; 
 
 struct Region_str {
-    void* start;
+    Segment* start; 
+    // void* start;
     Segment* allocs;
     size_t size;
     size_t align;

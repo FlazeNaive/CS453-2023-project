@@ -57,11 +57,38 @@ shared_t tm_create(size_t unused(size), size_t unused(align)) {
     if (unlikely(!region)) {
         return invalid_shared;
     }
-    if (unlikely(posix_memalign(&(region -> start), align, size) != 0)) {
+
+
+    // alloc the start
+    if (unlikely(posix_memalign((void**)&region -> start, align, sizeof(Segment) 
+                                                     + sizeof(atomic_tx) * size
+                                                     + sizeof(Word) * size * 2) != 0)) 
+    {
         free(region);
         return invalid_shared;
     }
-    memset(region -> start, 0, size);
+
+    memset(region -> start, 0, sizeof(Segment) 
+                   + sizeof(atomic_tx) * size 
+                   + sizeof(Word) * size * 2 );
+
+    region -> start -> data    =      (Word*)((uintptr_t)region -> start + sizeof(Segment));
+    region -> start -> shadow  =      (Word*)((uintptr_t)region -> start -> data + sizeof(Word) * size);
+    region -> start -> control = (atomic_tx*)((uintptr_t)region -> start -> shadow + sizeof(Word) * size);
+    // memset(seg -> data, 0, size * sizeof(Word));
+
+    // add creator and size
+    atomic_store(&(region -> start -> creator), it_is_free);
+    region -> start -> size = size;
+
+    // if (unlikely(posix_memalign(&(region -> start), align, size) != 0)) {
+    //     free(region);
+    //     return invalid_shared;
+    // }
+    // memset(region -> start, 0, size);
+
+
+
     region -> align = align;
     region -> size = size;
     region -> allocs = NULL; 
@@ -441,31 +468,43 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
  * @param target Target start address (in the shared region)
  * @return Whether the whole transaction can continue
 **/
+static int countttt = 0;
+
 bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* target) {
+    // ++countttt; 
+    // if (countttt > 10)
+    //     return false;
+
     // TODO: tm_write(shared_t, tx_t, void const*, size_t, void*)
-    #ifdef _DEBUG_FLZ_
-    printf("start tm_write\n");
-    #endif
+        #ifdef _DEBUG_FLZ_
+        printf("start tm_write %lu byte\n", size);
+        #endif
 
     #ifdef _TO_USE_BATCHER_
 
     Region *region = (Region*)shared;
     Segment *seg = findSegment(region, target);
     if (seg == NULL || atomic_load(&(seg -> to_delete))) {
-        // printf("tm_write: seg is NULL\n");
+        printf("tm_write: seg is NULL\n");
         Undo(region, tx); 
         return false;
     }
     if (!try_write(region, seg, tx, target, size)) {
-        // printf("tm_write: can_write failed\n");
+        printf("tm_write: can_write failed\n");
         Undo(region, tx); 
         return false;
     }
 
-    ulong offset = ((uintptr_t)target - (uintptr_t)seg -> data)/sizeof(Word);
-    memcpy(seg -> shadow + offset,
-            source, 
+    // printf("tm_write: %x -> %x \n", source, target);
+
+    // ulong offset = ((uintptr_t)target - (uintptr_t)seg -> data)/sizeof(Word);
+    // memcpy(seg -> shadow + offset,
+    //         source, 
+    //         size * sizeof(Word));
+    memcpy((char*) target + (seg -> size) * sizeof(Word),
+            source,
             size * sizeof(Word));
+    return true; 
 
     #endif
     // ==============================

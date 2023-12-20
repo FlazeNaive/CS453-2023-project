@@ -12,8 +12,17 @@
 #include <tm.h>
 
 static inline Segment* findSegment(const Region * region, const void* source) {
+    // printf("Looking for %p\n", source);
+
+
     Segment* seg = region -> allocs;
+
+    if ((Word*)region -> start <= (Word*)source
+        && (Word*)source < (Word*)region -> start + region -> start -> size) {
+            return region -> start; 
+        }
     while(seg != NULL) {
+        printf("Segment -> data: %p\n", seg -> data); 
         if (((Word*)seg -> data) <= ((Word*)source )
             && ((Word*)source) < (seg -> data) + seg -> size) {
             return seg;
@@ -24,6 +33,8 @@ static inline Segment* findSegment(const Region * region, const void* source) {
 }
 
 static inline void Undo(Region * region, const tx_t tx) {
+    // printf("Undoing %lu\n", tx);
+    // printf("Undoing %lu\n", -tx);
     for (Segment* segment = region -> allocs; segment != NULL; segment = segment -> next) {
         if (atomic_load(&(segment -> to_delete)) )
             continue;
