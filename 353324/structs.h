@@ -63,7 +63,7 @@ struct Segment_str {
     char* control;
     size_t size; 
     /// @brief actually it's the creator of this segment
-    atomic_tx creator; 
+    atomic_char creator; 
     atomic_bool to_delete; 
     struct Segment_str* next;
     struct Segment_str* previous; 

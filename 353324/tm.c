@@ -397,23 +397,25 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
         #endif
 
 
-    for (size_t i = 0; i < cnt_word; ++i) {
+    size_t step = region -> align; 
+    for (size_t i = 0; i < cnt_word; i += step) {
         char* control = seg -> control + offset + i;
         char expected = it_is_free;
         if (tx == atomic_load(control)) {
             memcpy(((Word*) target) + i , 
                     seg -> shadow + offset + i, 
-                    sizeof(Word));
+                    sizeof(Word) * step);
         } else {
             if (atomic_compare_exchange_strong(control, &expected, tx + batch_size)
                 || expected == tx + batch_size
                 ) {
                     memcpy(((Word*) target) + i , 
                             seg -> data + offset + i, 
-                            sizeof(Word));
+                            sizeof(Word) * step);
             } else {
                     #ifdef _DEBUG_FLZ_TEST_UNDO_
                     printf("tm_read: lock_read failed\n");
+                    printf("\toccupied by %d\n", expected); 
                     #endif
 
                 Undo(region, tx);
@@ -458,13 +460,14 @@ bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* t
 
     Region *region = (Region*)shared;
     Segment *seg = findSegment(region, target);
-    if (seg == NULL || atomic_load(&(seg -> to_delete))) {
+    if (seg == NULL){
             #ifdef _DEBUG_FLZ_TEST_UNDO_
             printf("tm_write: seg is NULL\n");
             #endif
         Undo(region, tx); 
         return false;
     }
+
     if (!try_write(region, seg, tx, target, size)) {
             #ifdef _DEBUG_FLZ_TEST_UNDO_
             printf("tm_write: lock_write failed\n");
@@ -478,14 +481,14 @@ bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* t
                                                           ((Word*) target) + (seg -> size) * sizeof(Word));
         #endif
 
-    // ulong offset = ((uintptr_t)target - (uintptr_t)seg -> data)/sizeof(Word);
-    // memcpy(seg -> shadow + offset,
-    //         source, 
-    //         size * sizeof(Word));
-    memcpy(((Word*) target) + (seg -> size) * sizeof(Word), 
-                            // to the shadow
-            source,
+    ulong offset = ((uintptr_t)target - (uintptr_t)seg -> data);
+    memcpy(seg -> shadow + offset,
+            source, 
             size * sizeof(Word));
+    // memcpy(((Word*) target) + (seg -> size) * sizeof(Word), 
+    //                         // to the shadow
+    //         source,
+    //         size * sizeof(Word));
     return true; 
 
     #endif
@@ -561,24 +564,42 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void** target) {
  * @param target Address of the first byte of the previously allocated segment to deallocate
  * @return Whether the whole transaction can continue
 **/
-bool tm_free(shared_t shared, tx_t unused(tx), void* target) {
+bool tm_free(shared_t shared, tx_t tx, void* target) {
     // printf("start tm_free: %x\n", target);
     Region *region = (Region*)shared;
-    Segment* seg = (Segment*)((uintptr_t)target - sizeof(Segment));
+    Segment *seg = findSegment(region, target);
+    if (seg == NULL){
+        Undo(region, tx); 
+        return false;
+    }
 
-    // remove from linked list
-    if (seg -> previous) 
-        seg -> previous -> next = seg -> next;
-    else 
-        region -> allocs = seg -> next;
-    if (seg -> next) 
-        seg -> next -> previous = seg -> previous;
+    char expected = it_is_free;
+    if (!atomic_compare_exchange_strong((&seg -> creator), &expected, tx) ||
+        expected == tx) {
+        Undo(region, tx); 
+        return false;
+    }
 
-    // print("freeing segment %x\n", seg);
-    // free(seg -> data);
-    free(seg);
-
+    atomic_store(&(seg -> to_delete), true);
     return true; 
+
+    // ==============================
+
+    // Segment* seg = (Segment*)((uintptr_t)target - sizeof(Segment));
+
+    // // remove from linked list
+    // if (seg -> previous) 
+    //     seg -> previous -> next = seg -> next;
+    // else 
+    //     region -> allocs = seg -> next;
+    // if (seg -> next) 
+    //     seg -> next -> previous = seg -> previous;
+
+    // // print("freeing segment %x\n", seg);
+    // // free(seg -> data);
+    // free(seg);
+
+    // return true; 
     // ==============================
 
     return false;
