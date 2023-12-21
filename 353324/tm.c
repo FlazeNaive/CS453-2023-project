@@ -42,11 +42,13 @@
  * @return Opaque shared memory region handle, 'invalid_shared' on failure
 **/
 
-shared_t tm_create(size_t unused(size), size_t unused(align)) {
+shared_t tm_create(size_t size, size_t align) {
 
     #ifdef _DEBUG_FLZ_
     // printf("STARTING my CREATE\n\n");
     #endif 
+
+    // printf("align: %lu\n", align);
 
     align = align < sizeof(void*) ? sizeof(void*) : align;
 
@@ -378,7 +380,9 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
 
     Segment* seg = findSegment(region, source);
     if (seg == NULL) {
-        // printf("tm_read: seg is NULL\n");
+            #ifdef _DEBUG_FLZ_TEST_UNDO_
+            printf("tm_read: seg is NULL\n");
+            #endif
         Undo(region, tx); 
         return false;
     }
@@ -408,6 +412,10 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
                             seg -> data + offset + i, 
                             sizeof(Word));
             } else {
+                    #ifdef _DEBUG_FLZ_TEST_UNDO_
+                    printf("tm_read: lock_read failed\n");
+                    #endif
+
                 Undo(region, tx);
                 return false;
             }
@@ -451,12 +459,16 @@ bool tm_write(shared_t shared, tx_t tx, void const* source, size_t size, void* t
     Region *region = (Region*)shared;
     Segment *seg = findSegment(region, target);
     if (seg == NULL || atomic_load(&(seg -> to_delete))) {
-        // printf("tm_write: seg is NULL\n");
+            #ifdef _DEBUG_FLZ_TEST_UNDO_
+            printf("tm_write: seg is NULL\n");
+            #endif
         Undo(region, tx); 
         return false;
     }
     if (!try_write(region, seg, tx, target, size)) {
-        // printf("tm_write: lock_write failed\n");
+            #ifdef _DEBUG_FLZ_TEST_UNDO_
+            printf("tm_write: lock_write failed\n");
+            #endif
         Undo(region, tx); 
         return false;
     }
