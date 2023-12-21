@@ -9,7 +9,7 @@
 #include <stdatomic.h>
 
 // Internal headers
-#include <tm.h>
+#include "Mytm.h"
 
 #include "macros.h"
 #include "shared-lock.h"
@@ -19,8 +19,10 @@ static const tx_t read_only_tx  = UINTPTR_MAX - 1;
 static const tx_t read_write_tx = UINTPTR_MAX - 2;
 static const tx_t to_delete = UINTPTR_MAX - 3;
 static const tx_t it_is_free    = 0; //UINTPTR_MAX - 4;
-static const ulong batch_size = 1; 
+static const ulong batch_size = 2; 
+// static const ulong batch_size = 1; 
 
+// typedef char tx_t; // The type of a transaction identifier
 typedef _Atomic(tx_t) atomic_tx;
 
 struct Batcher_str{

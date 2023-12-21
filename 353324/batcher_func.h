@@ -6,7 +6,8 @@
 // #define _DEBUG_FLZ_
 // #define _DEBUG_FLZ_TEST_READ_
 // #define _DEBUG_FLZ_TEST_WRITE_
-
+// #define _DEBUG_FLZ_TEST_LOCK_
+#define _DEBUG_FLZ_TEST_UNDO_
 
 #include <string.h>
 #include <stdatomic.h>
@@ -14,7 +15,7 @@
 
 #include "structs.h"
 #include "macros.h"
-#include <tm.h>
+#include "Mytm.h"
 
 static inline Segment* findSegment(const Region * region, const void* source) {
         #ifdef _DEBUG_FLZ_TEST_FIND_
@@ -56,6 +57,7 @@ static inline void Undo_seg(Segment* segment, const tx_t tx) {
         atomic_store(&(segment -> to_delete), 1); 
         return; 
     }
+
     for (size_t i = 0; i < segment -> size; ++i) {
         char * control = segment -> control + i;
         if (atomic_load(control) == tx) {
@@ -72,8 +74,12 @@ static inline void Undo_seg(Segment* segment, const tx_t tx) {
 }
 
 static inline void Undo(Region * region, const tx_t tx) {
-    // printf("Undoing %lu\n", tx);
-    // printf("Undoing %lu\n", -tx);
+        #ifdef _DEBUG_FLZ_TEST_UNDO_
+        printf("Undoing %lu\n", tx);
+        printf("Undoing %lu\n", tx + batch_size);
+        #endif
+
+
     Undo_seg(region -> start, tx);
     for (Segment* segment = region -> allocs; segment != NULL; segment = segment -> next) {
         Undo_seg(segment, tx);
@@ -83,6 +89,10 @@ static inline void Undo(Region * region, const tx_t tx) {
 
 static inline void Commit_seg(Region* region, Segment* seg) {
     if (atomic_load(&(seg -> to_delete))){
+            #ifdef _DEBUG_FLZ_TEST_UNDO_
+            printf("Undoing segment %p\n", seg);
+            #endif
+
         tm_free(region, seg -> creator, seg); 
         return; 
     }
@@ -127,10 +137,6 @@ static inline bool try_write(Region * unused(region), Segment* seg, tx_t tx, voi
             return false;
         }
     }
-    // for (size_t i = 0; i < size; ++i) {
-    //     char * control = seg -> control + offset + i;
-    //     atomic_store(control, tx);
-    // }
     memset(seg -> control + offset, (char)tx, size);
 
 

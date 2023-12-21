@@ -29,7 +29,7 @@
 #include <stdio.h>
 
 // Internal headers
-#include <tm.h>
+#include "Mytm.h"
 
 #include "structs.h"
 #include "batcher_func.h"
@@ -81,14 +81,6 @@ shared_t tm_create(size_t unused(size), size_t unused(align)) {
     atomic_store(&(region -> start -> creator), it_is_free);
     region -> start -> size = size;
 
-    // if (unlikely(posix_memalign(&(region -> start), align, size) != 0)) {
-    //     free(region);
-    //     return invalid_shared;
-    // }
-    // memset(region -> start, 0, size);
-
-
-
     region -> align = align;
     region -> size = size;
     region -> allocs = NULL; 
@@ -118,8 +110,6 @@ shared_t tm_create(size_t unused(size), size_t unused(align)) {
  * @param shared Shared memory region to destroy, with no running transaction
 **/
 void tm_destroy(shared_t shared) {
-    // TODO: tm_destroy(shared_t)
-
     #ifdef _DEBUG_FLZ_
     printf("STARTING my DESTROY\n\n");
     #endif 
@@ -146,8 +136,6 @@ void tm_destroy(shared_t shared) {
  * @return Start address of the first allocated segment
 **/
 void* tm_start(shared_t unused(shared)) {
-    // TODO: tm_start(shared_t)
-    // return NULL;
     Region *region = (Region*)shared;
     return region -> start -> data;
 }
@@ -199,7 +187,8 @@ tx_t tm_begin(shared_t shared, bool is_ro){
         tx_t process_idx = atomic_fetch_add(&(batcher->timestamp), 1);
 
             #ifdef _DEBUG_FLZ_
-                printf("tm_begin: is_ro, process: %lu\n", process_idx);
+                printf("tm_begin: is_ro, process: %lu (and the ts now is: %lu) \n", process_idx, atomic_load(&(batcher->timestamp)));
+                printf("current next: %lu\n", atomic_load(&(batcher->next)));
             #endif
 
         while (process_idx != atomic_load(&(batcher->next)))
@@ -227,7 +216,7 @@ tx_t tm_begin(shared_t shared, bool is_ro){
         tx_t process_idx = atomic_fetch_add(&(batcher->timestamp), 1);
 
             #ifdef _DEBUG_FLZ_
-            printf("tm_begin: is_rw, process: %lu\n", process_idx);
+            printf("tm_begin: is_rw, process: %lu (and the ts now is: %lu) \n", process_idx, atomic_load(&(batcher->timestamp)));
             printf("current next: %lu\n", atomic_load(&(batcher->next)));
             #endif
 
@@ -293,95 +282,59 @@ bool tm_end(shared_t shared, tx_t tx) {
     ulong process_idx = atomic_fetch_add(&(batcher->timestamp), 1);
 
         #ifdef _DEBUG_FLZ_
-        printf("===\ntm_end: process_idx: %lu\n", process_idx);
+        printf("===\ntm_end: process_idx: %lu (and the ts now is: %lu) \n", process_idx, atomic_load(&(batcher->timestamp)));
         printf("tm_end: next: %lu\n", atomic_load(&(batcher->next)));
         #endif
 
     while (process_idx != atomic_load(&(batcher->next)))
         sched_yield();
 
-    if (atomic_fetch_add(&(batcher->cnt_thread), -1) == 1
-        && atomic_load(&(batcher -> is_writing))
-        ) {
-                #ifdef _DEBUG_FLZ_
-                printf("ITS THE END OF EPOCH: %lu\n", atomic_load(&(batcher->cnt_epoch)));
-                #endif
-
+    if (atomic_fetch_add(&(batcher->cnt_thread), -1) == 1) {
+            #ifdef _DEBUG_FLZ_
+                printf("last of this epoch\n"); 
+            #endif
+        // if at the end of the epoch, do cleanup
+        if (atomic_load(&(batcher->is_writing))) {
             // if this epoch contains some writes
+
             Commit_seg(region, region -> start); 
             for (Segment* seg = region -> allocs; seg != NULL; seg = seg -> next) {
                 Commit_seg(region, seg);
             }
+
             // and start a new epoch
             atomic_store(&(batcher->res_writes), batch_size);
             atomic_store(&(batcher->is_writing), false);
-// 
+
             atomic_fetch_add(&(batcher->cnt_epoch), 1);
-    } else {
-        if (tx != read_only_tx) {
+        } else {
+
             atomic_fetch_add(&(batcher->next), 1);
-    
+            return true; 
+        }
+
+        atomic_fetch_add(&(batcher->next), 1);
+
+        return true;
+    } else {
+        // not the end of epoch
+        if (tx == read_only_tx) {
+            // if read-only, just return
+            // noneed to block
+            atomic_fetch_add(&(batcher->next), 1);
+            return true; 
+        } else {
+            // if is writing
+            // wait until the end of epoch 
+            // (after commit)
+            // to return
+            atomic_fetch_add(&(batcher->next), 1);
             ulong this_epoch = get_epoch(batcher);
             while (this_epoch == get_epoch(batcher))
                 sched_yield();
-
             return true;
         } 
     }
-    atomic_fetch_add(&(batcher->next), 1);
-    return true; 
-
-    // if (atomic_fetch_add(&(batcher->cnt_thread), -1) == 1) {
-    //         #ifdef _DEBUG_FLZ_
-    //             printf("last of this epoch\n"); 
-    //         #endif
-    //     // if at the end of the epoch, do cleanup
-    //     if (atomic_load(&(batcher->is_writing))) {
-    //         // if this epoch contains some writes
-    //         for (Segment* seg = region -> allocs; seg != NULL; seg = seg -> next) {
-    //             if (atomic_load(&(seg -> to_delete))){
-    //                 tm_free(region, seg -> creator, seg); 
-    //                 continue; 
-    //             }
-    //             // commit all writes
-    //             // from shadow to data
-    //             memcpy(seg -> data, seg -> shadow, seg -> size * sizeof(Word));
-    //             // and reset control
-    //             memset(seg -> control, 0, seg -> size * sizeof(tx_t));
-    //             // and it will not get reset in the following epoches
-    //             atomic_store(&(seg -> creator), it_is_free); 
-    //         }
-    //         // and start a new epoch
-    //         atomic_store(&(batcher->res_writes), batch_size);
-    //         atomic_store(&(batcher->is_writing), false);
-
-    //         atomic_fetch_add(&(batcher->cnt_epoch), 1);
-    //     } else {
-        //     process this readonly staff; 
-        // }
-
-    //     atomic_fetch_add(&(batcher->next), 1);
-
-    //     return true;
-    // } else {
-    //     // not the end of epoch
-    //     if (tx == read_only_tx) {
-    //         // if read-only, just return
-    //         // noneed to block
-    //         atomic_fetch_add(&(batcher->next), 1);
-    //         return true; 
-    //     } else {
-    //         // if is writing
-    //         // wait until the end of epoch 
-    //         // (after commit)
-    //         // to return
-    //         atomic_fetch_add(&(batcher->next), 1);
-    //         ulong this_epoch = get_epoch(batcher);
-    //         while (this_epoch == get_epoch(batcher))
-    //             sched_yield();
-    //         return true;
-    //     } 
-    // }
 
     #endif
 
@@ -567,7 +520,6 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void** target) {
     seg -> data = (Word*)((uintptr_t)seg + sizeof(Segment));
     seg -> shadow = (Word*)((uintptr_t)seg -> data + sizeof(Word) * size);
     seg -> control = (char*)((uintptr_t)seg -> shadow + sizeof(Word) * size);
-    // memset(seg -> data, 0, size * sizeof(Word));
 
     // add creator and size
     atomic_store(&(seg -> creator), tx);
@@ -598,7 +550,6 @@ alloc_t tm_alloc(shared_t shared, tx_t tx, size_t size, void** target) {
  * @return Whether the whole transaction can continue
 **/
 bool tm_free(shared_t shared, tx_t unused(tx), void* target) {
-    // TODO: tm_free(shared_t, tx_t, void*)
     // printf("start tm_free: %x\n", target);
     Region *region = (Region*)shared;
     Segment* seg = (Segment*)((uintptr_t)target - sizeof(Segment));
