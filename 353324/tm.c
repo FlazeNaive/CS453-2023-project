@@ -406,8 +406,10 @@ bool tm_read(shared_t shared, tx_t tx, void const* source, size_t size, void* ta
                     seg -> shadow + offset + i, 
                     sizeof(Word) * step);
         } else {
-            if (atomic_compare_exchange_strong(control, &expected, tx + batch_size)
-                || expected == tx + batch_size
+            if (atomic_compare_exchange_strong(control, &expected, -tx )
+            // tx + batch_size)
+                // || expected == tx + batch_size
+                || expected == -tx
                 ) {
                     memcpy(((Word*) target) + i , 
                             seg -> data + offset + i, 

@@ -7,7 +7,7 @@
 // #define _DEBUG_FLZ_TEST_READ_
 // #define _DEBUG_FLZ_TEST_WRITE_
 // #define _DEBUG_FLZ_TEST_LOCK_
-// #define _DEBUG_FLZ_TEST_UNDO_
+#define _DEBUG_FLZ_TEST_UNDO_
 
 #include <string.h>
 #include <stdatomic.h>
@@ -76,10 +76,12 @@ static inline void Undo_seg(Segment* segment, const tx_t tx, const size_t step) 
         } 
         else {
             // if we did the read
-            char we_read_tx = tx + batch_size;
+            // char we_read_tx = tx + batch_size;
+            char we_read_tx = -tx;
             atomic_compare_exchange_strong(control, &we_read_tx, it_is_free);
                 #ifdef _DEBUG_FLZ_TEST_UNDO_
-                if (we_read_tx == tx + batch_size) {
+                if (we_read_tx == -tx){
+                    //  + batch_size) {
                     printf("!j: %lu\n", i/8);
                 }
                 #endif
@@ -90,7 +92,8 @@ static inline void Undo_seg(Segment* segment, const tx_t tx, const size_t step) 
 static inline void Undo(Region * region, const tx_t tx) {
         #ifdef _DEBUG_FLZ_TEST_UNDO_
         printf("Undoing %lu\n", tx);
-        printf("Undoing %lu\n", tx + batch_size);
+        // printf("Undoing %lu\n", tx + batch_size);
+        printf("Undoing %lu\n", -tx );
         #endif
 
 
@@ -157,7 +160,8 @@ static inline bool try_write(Region * region, Segment* seg, tx_t tx, void* targe
     size_t step = region -> align; 
     for (size_t i = 0; i < size; i += step) {
         char * control = seg -> control + offset + i;
-        char expected1 = it_is_free, expected2 = tx + batch_size;
+        char expected1 = it_is_free, expected2 = -tx;
+        //  + batch_size;
 
         if (!(atomic_compare_exchange_strong(control, &expected1, tx) 
             || expected1 == tx 
